@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import time
-
 """
 This function calculates the expected returns
  and log returns for a given stock ticker over a specified time frame. 
@@ -37,14 +36,19 @@ can be optionally bounded using start and end dates.
 """
 
 
-def allto(stocks,timeframe, start = None, end = None):
-    samp = pd.DataFrame()
+def allto(stocks, timeframe, start=None, end=None):
     returns = []
-    for i in stocks:
-        e, r = calcreturns(i,timeframe, start, end)
-        samp[i] = r
-        returns.append(e)
-    return samp.cov(), returns
+    if start is None:
+        data = yf.download(stocks,period=timeframe)
+    else:
+        data = yf.download(stocks, start=start, end=end)
+    close_prices = data['Close']
+    price_relative = close_prices / close_prices.shift(1)
+    log_returns = np.log(price_relative).dropna() * 100
+    expected_returns = log_returns.mean()
+    cov_matrix = log_returns.cov()
+    return cov_matrix, expected_returns.values
+
 
 
 """
@@ -121,14 +125,14 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     for target in target_returns:
 
         bounds = tuple((0, 1) for asset in range(len(stocks)))
-        result = minimize(portfolio_variance, weights_matrix[np.random.randint(0,num_portfolios)], args=(cov_matrix,), method='SLSQP', bounds=bounds, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
+        result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=bounds, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
         
         efficient_portfolio_returns.append(target)
         efficient_portfolio_volatilities.append(np.sqrt(result['fun']))
         efficient_portfolio_weights.append(result['x'])
 
-    print("Success: ", result.success)
-    print("Message: ", result.message)
+    #print("Success: ", result.success)
+    #print("Message: ", result.message)
     #plt.scatter(efficient_portfolio_volatilities, efficient_portfolio_returns)
     #plt.xlabel('Volatility')
     #plt.ylabel('Expected Returns')
@@ -146,6 +150,7 @@ This function uses the efficient_frontier() function to construct efficient fron
 """
 
 def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False, start = None, end = None):
+    start1 = time.perf_counter()
     if noconstraints == False:
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
@@ -172,7 +177,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         x5, y5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
         x4, y4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
         x6, y6 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
-        x3, y3,w1 = efficient_frontier(stocks, portfolios, time_frame,start= start, end=end)
+        x3, y3,w1 = efficient_frontier(stocks, portfolios * 10, time_frame,start= start, end=end)
         bondcount = security_type.count("Bond")
         colors = []
         for i in w1:
@@ -183,7 +188,8 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         plt.plot(y5,x5,label = "70-30")
         plt.plot(y4,x4,label = "50-50")
         plt.plot(y6,x6,label = "40-60")
-        
+        end1 = time.perf_counter()
+        print(end1-start1)
 
         plt.scatter(y3,x3,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
         if start is None:
@@ -198,5 +204,6 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-graphit(1000,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
+graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
+
 #graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
