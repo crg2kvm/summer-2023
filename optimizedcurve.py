@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
+import time
 
 """
 This function calculates the expected returns
@@ -133,8 +134,10 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     #plt.ylabel('Expected Returns')
     #plt.title('Efficient Frontier')
     #plt.show()
-    
-    return efficient_portfolio_returns,efficient_portfolio_volatilities
+    if stock_weight is None:
+        return efficient_portfolio_returns,efficient_portfolio_volatilities, efficient_portfolio_weights
+    else:
+        return efficient_portfolio_returns,efficient_portfolio_volatilities
 
 
 """
@@ -163,25 +166,37 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
         z = weights
+        
         x2, y2 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.60,0.40, start, end)
         x1, y1 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.55,0.45, start, end)
         x5, y5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
         x4, y4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
         x6, y6 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
-        x3, y3 = efficient_frontier(stocks, portfolios, time_frame,start= start, end=end)
-
-
+        x3, y3,w1 = efficient_frontier(stocks, portfolios, time_frame,start= start, end=end)
+        bondcount = security_type.count("Bond")
+        colors = []
+        for i in w1:
+            colors.append(np.sum(i[:bondcount]))
+        
         plt.plot(y2,x2,label = "60-40")
         plt.plot(y1,x1,label = "55-45")
         plt.plot(y5,x5,label = "70-30")
         plt.plot(y4,x4,label = "50-50")
         plt.plot(y6,x6,label = "40-60")
-        plt.plot(y3,x3,label = "No Constraints")
+        
+
+        plt.scatter(y3,x3,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
+        if start is None:
+            plt.title(time_frame)
+        else:
+            plt.title(start+" to "+end)
         plt.xlabel("Risk")
         plt.ylabel("Return")
         plt.legend()
         plt.show()
         
 
-graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"],["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"],"10y",True)
+assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
+assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
+graphit(1000,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
 #graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
