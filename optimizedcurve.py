@@ -177,7 +177,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         x5, y5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
         x4, y4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
         x6, y6 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
-        x3, y3,w1 = efficient_frontier(stocks, portfolios, time_frame,start= start, end=end)
+        x3, y3,w1 = efficient_frontier(stocks, portfolios * 10, time_frame,start= start, end=end)
         bondcount = security_type.count("Bond")
         colors = []
         for i in w1:
@@ -204,6 +204,6 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-graphit(1000,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
+graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
 
 #graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
