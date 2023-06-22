@@ -36,8 +36,9 @@ can be optionally bounded using start and end dates.
 """
 
 
+
+
 def allto(stocks, timeframe, start=None, end=None):
-    returns = []
     if start is None:
         data = yf.download(stocks,period=timeframe)
     else:
@@ -45,11 +46,10 @@ def allto(stocks, timeframe, start=None, end=None):
     close_prices = data['Close']
     price_relative = close_prices / close_prices.shift(1)
     log_returns = np.log(price_relative).dropna() * 100
-    expected_returns = log_returns.mean()
-    cov_matrix = log_returns.cov()
+    # Convert to annual returns
+    expected_returns = ((1 + log_returns.mean()/100)**252 - 1) * 100
+    cov_matrix = log_returns.cov() 
     return cov_matrix, expected_returns.values
-
-
 
 """
 This function computes the variance (risk) of a portfolio given a set of portfolio weights and a covariance matrix.
@@ -128,7 +128,7 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=bounds, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
         
         efficient_portfolio_returns.append(target)
-        efficient_portfolio_volatilities.append(np.sqrt(result['fun']))
+        efficient_portfolio_volatilities.append(np.sqrt(result['fun'] * 252))
         efficient_portfolio_weights.append(result['x'])
 
     #print("Success: ", result.success)
