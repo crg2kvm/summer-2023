@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import time
+from openpyxl import load_workbook
 """
 This function calculates the expected returns
  and log returns for a given stock ticker over a specified time frame. 
@@ -149,10 +150,17 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     #plt.ylabel('Expected Returns')
     #plt.title('Efficient Frontier')
     #plt.show()
+    #df = pd.DataFrame(efficient_portfolio_weights, columns=stocks)
+    #df['Return'] = efficient_portfolio_returns
+    #df['Risk'] = efficient_portfolio_volatilities
+
+    # Export the DataFrame to an Excel file
+    #df.to_excel('portfolio_data.xlsx', index=False)
+
     if stock_weight is None:
-        return efficient_portfolio_returns,efficient_portfolio_volatilities, efficient_portfolio_weights
+        return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights
     else:
-        return efficient_portfolio_returns,efficient_portfolio_volatilities
+        return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights
 
 
 """
@@ -179,30 +187,51 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         plt.legend()
         plt.show()
     else:
+        writer = pd.ExcelWriter('portfolio_weights.xlsx', engine='openpyxl')
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
         z = weights
-        
-        x2, y2 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.60,0.40, start, end)
-        x1, y1 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.55,0.45, start, end)
-        x5, y5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
-        x4, y4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
-        x6, y6 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
-        x3, y3,w1 = efficient_frontier(stocks, portfolios * 10, time_frame,start= start, end=end)
+
+        x1, y1, w1 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.55,0.45, start, end)
+        x2, y2, w2 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.60,0.40, start, end)
+        x3, y3, w3 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
+        x4, y4, w4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
+        x5, y5, w5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
+        x6, y6,w6 = efficient_frontier(stocks, portfolios * 10, time_frame,start= start, end=end)
+
+        df1 = pd.DataFrame(w1, columns=stocks)
+        df1['Returns'] = y1
+        df1['Risk'] = x1
+        df2 = pd.DataFrame(w2, columns=stocks)
+        df3 = pd.DataFrame(w3, columns=stocks)
+        df4 = pd.DataFrame(w4, columns=stocks)
+        df5 = pd.DataFrame(w5, columns=stocks)
+        df6 = pd.DataFrame(w6, columns=stocks)
+
+        # Write each dataframe to a different worksheet
+        df1.to_excel(writer, sheet_name='55-45')
+        df2.to_excel(writer, sheet_name='60-40')
+        df3.to_excel(writer, sheet_name='40-60')
+        df4.to_excel(writer, sheet_name='50-50')
+        df5.to_excel(writer, sheet_name='70-30')
+        df6.to_excel(writer, sheet_name='No Constraints')
+
+        # Close the Pandas Excel writer and output the Excel file
+        writer._save()
+
         bondcount = security_type.count("Bond")
         colors = []
-        for i in w1:
+        for i in w6:
             colors.append(np.sum(i[:bondcount]))
-        
-        plt.plot(y2,x2,label = "60-40")
-        plt.plot(y1,x1,label = "55-45")
-        plt.plot(y5,x5,label = "70-30")
-        plt.plot(y4,x4,label = "50-50")
-        plt.plot(y6,x6,label = "40-60")
+
+        plt.plot(x1,y1,label = "55-45")
+        plt.plot(x2,y2,label = "60-40")
+        plt.plot(x3,y3,label = "40-60")
+        plt.plot(x4,y4,label = "50-50")
+        plt.plot(x5,y5,label = "70-30")
         end1 = time.perf_counter()
         print(end1-start1)
-
-        plt.scatter(y3,x3,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
+        plt.scatter(x6,y6,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
         if start is None:
             plt.title(time_frame)
         else:
