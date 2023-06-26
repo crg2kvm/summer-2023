@@ -38,18 +38,29 @@ can be optionally bounded using start and end dates.
 
 
 
+
+
 def allto(stocks, timeframe, start=None, end=None):
-    if start is None:
-        data = yf.download(stocks,period=timeframe)
-    else:
-        data = yf.download(stocks, start=start, end=end)
-    close_prices = data['Close']
-    price_relative = close_prices / close_prices.shift(1)
-    log_returns = np.log(price_relative).dropna() * 100
-    # Convert to annual returns
-    expected_returns = ((1 + log_returns.mean()/100)**252 - 1) * 100
-    cov_matrix = log_returns.cov() 
-    return cov_matrix, expected_returns.values
+    for stock in stocks:
+        if start is None:
+            data = yf.download(stocks,period=timeframe)
+        else:
+            data = yf.download(stocks, start=start, end=end)
+        if data.empty:
+                print(f"No data found for {stock} in the specified time frame. Skipping this asset...")
+                continue
+        close_prices = data['Close']
+        price_relative = close_prices / close_prices.shift(1)
+        log_returns = np.log(price_relative).dropna() * 100
+        num_years = len(log_returns) / 252  # approximate number of trading days in a year
+        """
+        beginning_value = close_prices.iloc[0]
+        ending_value = close_prices.iloc[-1]
+        expected_returns = ((ending_value / beginning_value) ** (1 / num_years) - 1) * 100
+        """
+        expected_returns = ((1 + log_returns.mean()/100)**252 - 1) * 100
+        cov_matrix = log_returns.cov() 
+        return cov_matrix, expected_returns.values, num_years
 
 """
 This function computes the variance (risk) of a portfolio given a set of portfolio weights and a covariance matrix.
@@ -102,7 +113,7 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
     else:
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
-    cov_matrix, stockreturns = allto(stocks, timeframe,start,end)
+    cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
     efficient_portfolio_returns = []
     efficient_portfolio_volatilities = []
     efficient_portfolio_weights = []
