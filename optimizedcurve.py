@@ -232,6 +232,26 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         end1 = time.perf_counter()
         print(end1-start1)
         plt.scatter(x6,y6,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
+
+        sp500 = yf.download("^GSPC", start=start, end=end)
+        sp500_price_relative = sp500['Close'] / sp500['Close'].shift(1)
+        sp500_log_returns = np.log(sp500_price_relative).dropna() * 100
+        sp500_annual_returns = ((1 + sp500_log_returns.mean()/100)**252 - 1) * 100
+        sp500_annual_volatility = sp500_log_returns.std() * np.sqrt(252)
+        plt.scatter(sp500_annual_volatility, sp500_annual_returns, color='red', label='S&P 500')
+        spy = yf.download("SPY", start=start, end=end)
+        spy_price_relative = spy['Close'] / spy['Close'].shift(1)
+        spy_log_returns = np.log(spy_price_relative).dropna() * 100
+        spy_annual_returns = ((1 + spy_log_returns.mean()/100)**252 - 1) * 100
+        spy_annual_volatility = spy_log_returns.std() * np.sqrt(252)
+        plt.scatter(spy_annual_volatility, spy_annual_returns, color='blue', label='SPY')
+        agg = yf.download("AGG", start=start, end=end)
+        agg_price_relative = agg['Close'] / agg['Close'].shift(1)
+        agg_log_returns = np.log(agg_price_relative).dropna() * 100
+        agg_annual_returns = ((1 + agg_log_returns.mean()/100)**252 - 1) * 100
+        agg_annual_volatility = agg_log_returns.std() * np.sqrt(252)
+        plt.scatter(agg_annual_volatility, agg_annual_returns, color='green', label='AGG')
+
         if start is None:
             plt.title(time_frame)
         else:
@@ -244,6 +264,19 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
+#graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
 
 #graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
+
+start_date = pd.to_datetime('2010-01-01')
+end_date = pd.to_datetime('2022-12-31')
+window_size = 10  # years
+dates_range = pd.date_range(start_date, end_date, freq='YS') 
+for current_year in dates_range:
+    start = current_year - pd.DateOffset(years=window_size)
+    end = current_year
+    if start < start_date:
+        continue
+    start = start.strftime('%Y-%m-%d')
+    end = end.strftime('%Y-%m-%d')
+    graphit(100, assets, assettype, "10y", True, start, end)
