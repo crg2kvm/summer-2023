@@ -264,10 +264,10 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-#graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
+graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
 
 #graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
-
+"""
 start_date = pd.to_datetime('2010-01-01')
 end_date = pd.to_datetime('2022-12-31')
 window_size = 10  # years
@@ -280,3 +280,4 @@ for current_year in dates_range:
     start = start.strftime('%Y-%m-%d')
     end = end.strftime('%Y-%m-%d')
     graphit(100, assets, assettype, "10y", True, start, end)
+"""
