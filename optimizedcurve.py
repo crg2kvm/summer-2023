@@ -86,6 +86,7 @@ def generate_portfolio_weights(num_assets, num_portfolios, num_bond=None, stock_
     else:
         for i in range(num_portfolios):
             stock_weights = np.random.random(num_assets - num_bond)
+            #print(stock_weights)
             stock_weights = stock_weight * (stock_weights/np.sum(stock_weights))
             bond_weights = np.random.random(num_bond)
             bond_weights = bond_weight * (bond_weights/np.sum(bond_weights))
@@ -143,20 +144,6 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         efficient_portfolio_volatilities.append(np.sqrt(result['fun'] * 252))
         efficient_portfolio_weights.append(result['x'])
 
-    #print("Success: ", result.success)
-    #print("Message: ", result.message)
-    #plt.scatter(efficient_portfolio_volatilities, efficient_portfolio_returns)
-    #plt.xlabel('Volatility')
-    #plt.ylabel('Expected Returns')
-    #plt.title('Efficient Frontier')
-    #plt.show()
-    #df = pd.DataFrame(efficient_portfolio_weights, columns=stocks)
-    #df['Return'] = efficient_portfolio_returns
-    #df['Risk'] = efficient_portfolio_volatilities
-
-    # Export the DataFrame to an Excel file
-    #df.to_excel('portfolio_data.xlsx', index=False)
-
     if stock_weight is None:
         return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights
     else:
@@ -168,53 +155,65 @@ This function uses the efficient_frontier() function to construct efficient fron
  a portfolio under different constraints. It then plots these frontiers on a graph.
 """
 
-def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False, start = None, end = None):
+def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False, start = None, end = None, rolling = False, port_bond=None, port_stock=None):
     start1 = time.perf_counter()
-    if noconstraints == False:
+    if rolling == True:
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
-        z = [1/6,1/6,1/6,1/6,1/6,1/6]
-        x2, y2 = efficient_frontier(stocks, portfolios, time_frame,z,security_type,0.60,0.40)
-        x1, y1 = efficient_frontier(stocks, portfolios, time_frame,z,security_type,0.55,0.45)
-        test = pd.DataFrame()
-        one = np.ones(portfolios)
-        zero = np.zeros(portfolios)
-        #test["returns"] = np.append(x1,x2)
-        #test["risk"] = np.append(y1,y2)
-        #test["colors"] = np.append(zero,one)
-        plt.plot(y2,x2,label = "60-40")
-        plt.plot(y1,x1,label = "55-45")
+        x1, y1, w1 = efficient_frontier(stocks, portfolios, time_frame, security_type,port_stock,port_bond,start,end)
+        plt.plot(x1,y1,label = start)
+        title = str(port_stock)+"-"+str(port_bond)+" over " +str(time_frame)
+        plt.title(title)
+
         plt.legend()
-        plt.show()
     else:
         writer = pd.ExcelWriter('portfolio_weights.xlsx', engine='openpyxl')
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
         z = weights
-
+        x0, y0, w0 = efficient_frontier(stocks, portfolios, time_frame,security_type,0,1, start, end)
         x1, y1, w1 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.55,0.45, start, end)
         x2, y2, w2 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.60,0.40, start, end)
         x3, y3, w3 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
         x4, y4, w4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
         x5, y5, w5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
         x6, y6,w6 = efficient_frontier(stocks, portfolios * 10, time_frame,start= start, end=end)
-
+        x7, y7, w7 = efficient_frontier(stocks, portfolios, time_frame,security_type,1,0, start, end)
         df1 = pd.DataFrame(w1, columns=stocks)
         df1['Returns'] = y1
         df1['Risk'] = x1
         df2 = pd.DataFrame(w2, columns=stocks)
+        df2['Returns'] = y2
+        df2['Risk'] = x2
         df3 = pd.DataFrame(w3, columns=stocks)
+        df3['Returns'] = y3
+        df3['Risk'] = x3
         df4 = pd.DataFrame(w4, columns=stocks)
+        df4['Returns'] = y4
+        df4['Risk'] = x4
         df5 = pd.DataFrame(w5, columns=stocks)
+        df5['Returns'] = y5
+        df5['Risk'] = x5
         df6 = pd.DataFrame(w6, columns=stocks)
+        df6['Returns'] = y6
+        df6['Risk'] = x6
+        df0 = pd.DataFrame(w0, columns=stocks)
+        df0['Returns'] = y0
+        df0['Risk'] = x0
+        df7 = pd.DataFrame(w7, columns=stocks)
+        df7['Returns'] = y7
+        df7['Risk'] = x7
+
 
         # Write each dataframe to a different worksheet
+        df0.to_excel(writer, sheet_name='0-100')
         df1.to_excel(writer, sheet_name='55-45')
         df2.to_excel(writer, sheet_name='60-40')
         df3.to_excel(writer, sheet_name='40-60')
         df4.to_excel(writer, sheet_name='50-50')
         df5.to_excel(writer, sheet_name='70-30')
         df6.to_excel(writer, sheet_name='No Constraints')
+        df7.to_excel(writer, sheet_name='100-0')
 
         # Close the Pandas Excel writer and output the Excel file
         writer._save()
@@ -224,11 +223,13 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         for i in w6:
             colors.append(np.sum(i[:bondcount]))
 
+        #plt.plot(x0,y0,label = "0-100")
         plt.plot(x1,y1,label = "55-45")
         plt.plot(x2,y2,label = "60-40")
         plt.plot(x3,y3,label = "40-60")
         plt.plot(x4,y4,label = "50-50")
         plt.plot(x5,y5,label = "70-30")
+        plt.plot(x7,y7,label = "100-0")
         end1 = time.perf_counter()
         print(end1-start1)
         plt.scatter(x6,y6,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
@@ -264,20 +265,24 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-graphit(100,assets,assettype,"10y",True,"2016-01-01","2020-01-01")
+#graphit(100,assets,assettype,"10y",True,"2010-01-01","2020-12-31")
 
 #graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
-"""
-start_date = pd.to_datetime('2010-01-01')
-end_date = pd.to_datetime('2022-12-31')
-window_size = 10  # years
-dates_range = pd.date_range(start_date, end_date, freq='YS') 
-for current_year in dates_range:
-    start = current_year - pd.DateOffset(years=window_size)
-    end = current_year
-    if start < start_date:
-        continue
-    start = start.strftime('%Y-%m-%d')
-    end = end.strftime('%Y-%m-%d')
-    graphit(100, assets, assettype, "10y", True, start, end)
-"""
+def rolling(start, end, windowsize, bond,stock):
+    start_date = pd.to_datetime(start)
+    end_date = pd.to_datetime(end)
+    window_size = windowsize  # years
+    dates_range = pd.date_range(start_date, end_date, freq='YS') 
+    print(dates_range)
+    for current_year in dates_range:
+        start = current_year - pd.DateOffset(years=window_size)
+        end = current_year
+        if start < start_date:
+            continue
+        start = start.strftime('%Y-%m-%d')
+        end = end.strftime('%Y-%m-%d')
+        #print(assettype)
+        time_frame = str(window_size) + "y"
+        graphit(100, assets, assettype, time_frame, True, start, end,True,bond,stock)
+    plt.show()
+rolling("2015-01-01","2023-01-01",5,0.4,0.6)
