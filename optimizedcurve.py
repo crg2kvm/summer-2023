@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import time
 from openpyxl import load_workbook
+import datetime
 """
 This function calculates the expected returns
  and log returns for a given stock ticker over a specified time frame. 
@@ -109,7 +110,7 @@ The function can also include constraints on the portfolio, such as a maximum we
 """
 
 def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None, stock_weight = None, bond_weight = None, start = None, end = None):
-    if security_type is not None: 
+    if stock_weight is not None: 
         security_type.sort()
         num_bond = security_type.count("Bond")
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
@@ -119,8 +120,14 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     efficient_portfolio_returns = []
     efficient_portfolio_volatilities = []
     efficient_portfolio_weights = []
-    
-    if security_type is not None:
+    r = stockreturns
+    V = cov_matrix
+    e = np.ones(r.shape)
+    A = np.dot(e.T, np.dot(np.linalg.inv(V), e))
+    B = np.dot(r.T, np.dot(np.linalg.inv(V), e))
+    C = np.dot(r.T, np.dot(np.linalg.inv(V), r))
+    coeff = [A,B,C]
+    if stock_weight is not None:
         cons = ({'type': 'eq', 'fun': lambda x: portfolio_return(x, stockreturns) - target},   
                 {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
                 {'type': 'eq', 'fun': lambda x: np.sum(x[:num_bond]) - bond_weight},  
@@ -171,69 +178,44 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
         z = weights
-        x0, y0, w0 = efficient_frontier(stocks, portfolios, time_frame,security_type,0,1, start, end)
-        x1, y1, w1 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.55,0.45, start, end)
-        x2, y2, w2 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.60,0.40, start, end)
-        x3, y3, w3 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.4,0.6, start, end)
-        x4, y4, w4 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.5,0.5, start, end)
-        x5, y5, w5 = efficient_frontier(stocks, portfolios, time_frame,security_type,0.7,0.3, start, end)
-        x6, y6,w6 = efficient_frontier(stocks, portfolios * 10, time_frame,start= start, end=end)
-        x7, y7, w7 = efficient_frontier(stocks, portfolios, time_frame,security_type,1,0, start, end)
-        df1 = pd.DataFrame(w1, columns=stocks)
-        df1['Returns'] = y1
-        df1['Risk'] = x1
-        df2 = pd.DataFrame(w2, columns=stocks)
-        df2['Returns'] = y2
-        df2['Risk'] = x2
-        df3 = pd.DataFrame(w3, columns=stocks)
-        df3['Returns'] = y3
-        df3['Risk'] = x3
-        df4 = pd.DataFrame(w4, columns=stocks)
-        df4['Returns'] = y4
-        df4['Risk'] = x4
-        df5 = pd.DataFrame(w5, columns=stocks)
-        df5['Returns'] = y5
-        df5['Risk'] = x5
-        df6 = pd.DataFrame(w6, columns=stocks)
-        df6['Returns'] = y6
-        df6['Risk'] = x6
-        df0 = pd.DataFrame(w0, columns=stocks)
-        df0['Returns'] = y0
-        df0['Risk'] = x0
-        df7 = pd.DataFrame(w7, columns=stocks)
-        df7['Returns'] = y7
-        df7['Risk'] = x7
+        bondcount = security_type.count("Bond")
+        colors = []
 
+        # Define the configurations for the efficient frontier
+        configs = [
+            {"alpha": 0, "beta": 1, "sheet_name": '0-100', "label": "0-100", "plot": True},
+            {"alpha": 0.55, "beta": 0.45, "sheet_name": '55-45', "label": "55-45", "plot": True},
+            {"alpha": 0.60, "beta": 0.40, "sheet_name": '60-40', "label": "60-40", "plot": True},
+            {"alpha": 0.4, "beta": 0.6, "sheet_name": '40-60', "label": "40-60", "plot": True},
+            {"alpha": 0.5, "beta": 0.5, "sheet_name": '50-50', "label": "50-50", "plot": True},
+            {"alpha": 0.7, "beta": 0.3, "sheet_name": '70-30', "label": "70-30", "plot": True},
+            {"alpha": None, "beta": None, "sheet_name": 'No Constraints', "label": "No Constraints", "plot": False, "portfolios_multiplier": 10},
+            #{"alpha": 1, "beta": 0, "sheet_name": '100-0', "label": "100-0", "plot": True},
+        ]
 
-        # Write each dataframe to a different worksheet
-        df0.to_excel(writer, sheet_name='0-100')
-        df1.to_excel(writer, sheet_name='55-45')
-        df2.to_excel(writer, sheet_name='60-40')
-        df3.to_excel(writer, sheet_name='40-60')
-        df4.to_excel(writer, sheet_name='50-50')
-        df5.to_excel(writer, sheet_name='70-30')
-        df6.to_excel(writer, sheet_name='No Constraints')
-        df7.to_excel(writer, sheet_name='100-0')
+        for config in configs:
+            alpha, beta, sheet_name, label, plot = config["alpha"], config["beta"], config["sheet_name"], config["label"], config["plot"]
+            portfolios_multiplier = config.get("portfolios_multiplier", 1)
+
+            x, y, w = efficient_frontier(stocks, portfolios * portfolios_multiplier, time_frame, security_type, alpha, beta, start, end)
+
+            df = pd.DataFrame(w, columns=stocks)
+            df['Returns'] = y
+            df['Risk'] = x
+            df.to_excel(writer, sheet_name=sheet_name)
+
+            if plot:
+                plt.plot(x, y, label=label)
+                
+            if sheet_name == 'No Constraints':
+                for i in w:
+                    colors.append(np.sum(i[:bondcount]))
+                plt.scatter(x, y, label=label, c=colors, marker=".", cmap="RdYlGn", s=5)
 
         # Close the Pandas Excel writer and output the Excel file
         writer._save()
-
-        bondcount = security_type.count("Bond")
-        colors = []
-        for i in w6:
-            colors.append(np.sum(i[:bondcount]))
-
-        #plt.plot(x0,y0,label = "0-100")
-        plt.plot(x1,y1,label = "55-45")
-        plt.plot(x2,y2,label = "60-40")
-        plt.plot(x3,y3,label = "40-60")
-        plt.plot(x4,y4,label = "50-50")
-        plt.plot(x5,y5,label = "70-30")
-        plt.plot(x7,y7,label = "100-0")
         end1 = time.perf_counter()
         print(end1-start1)
-        plt.scatter(x6,y6,label = "No Constraints",c=colors,marker=".",cmap="RdYlGn",s=5)
-
         sp500 = yf.download("^GSPC", start=start, end=end)
         sp500_price_relative = sp500['Close'] / sp500['Close'].shift(1)
         sp500_log_returns = np.log(sp500_price_relative).dropna() * 100
@@ -256,18 +238,25 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         if start is None:
             plt.title(time_frame)
         else:
-            plt.title(start+" to "+end)
+            title = start+" to "+end
+            plt.title(title)
+        
+        t = datetime.datetime.now()
+        title+= str(t) + ".pdf"
+        title = title.replace(" ","_")
+        title = title.replace("-","_")
+        title = title.replace(":","_")
         plt.xlabel("Risk")
         plt.ylabel("Return")
         plt.legend()
+        plt.savefig(title,format="pdf")
         plt.show()
         
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-#graphit(100,assets,assettype,"10y",True,"2010-01-01","2020-12-31")
+graphit(100,assets,assettype,"10y",True,"2015-01-01","2020-12-31")
 
-#graphit(1000,["TLT","AGG","SHY","XLP","XLE","XOP"],["Bond","Bond","Bond","Stock","Stock","Stock"],"ytd",True
 def rolling(start, end, windowsize, bond,stock):
     start_date = pd.to_datetime(start)
     end_date = pd.to_datetime(end)
@@ -286,7 +275,12 @@ def rolling(start, end, windowsize, bond,stock):
         graphit(100, assets, assettype, time_frame, True, start, end,True,bond,stock)
     plt.xlabel("Risk(STD)")
     plt.ylabel("Return(Annualized log returns)")
-    time_frame += ".pdf"
-    plt.savefig(time_frame,format="pdf")
+    title = time_frame
+    t = datetime.datetime.now()
+    title+= str(t) + ".pdf"
+    title = title.replace(" ","_")
+    title = title.replace("-","_")
+    title = title.replace(":","_")
+    plt.savefig(title,format="pdf")
     plt.show()
-rolling("2015-01-01","2023-01-01",5,0.4,0.6)
+#rolling("2015-01-01","2023-01-01",5,0.4,0.6)
