@@ -284,5 +284,9 @@ def rolling(start, end, windowsize, bond,stock):
         #print(assettype)
         time_frame = str(window_size) + "y"
         graphit(100, assets, assettype, time_frame, True, start, end,True,bond,stock)
+    plt.xlabel("Risk(STD)")
+    plt.ylabel("Return(Annualized log returns)")
+    time_frame += ".pdf"
+    plt.savefig(time_frame,format="pdf")
     plt.show()
 rolling("2015-01-01","2023-01-01",5,0.4,0.6)
