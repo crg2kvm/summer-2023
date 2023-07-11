@@ -6,6 +6,7 @@ from scipy.optimize import minimize
 import time
 from openpyxl import load_workbook
 import datetime
+from matplotlib.backends.backend_pdf import PdfPages
 """
 This function calculates the expected returns
  and log returns for a given stock ticker over a specified time frame. 
@@ -15,11 +16,11 @@ def calcreturns(ticker,time_frame,start = None, end = None):
     tick = yf.Ticker(ticker)
 
     if start is None and end is None:
-        #print("hit")
+        
         dat = pd.DataFrame(tick.history(period=time_frame))
     else:
         dat = pd.DataFrame(tick.history(start=start, end = end))
-    #print(dat)
+    
     price_relative = []
     price_relative = np.array(np.zeros(len(dat)-2))
     for i in range(len(dat)-2):
@@ -87,7 +88,7 @@ def generate_portfolio_weights(num_assets, num_portfolios, num_bond=None, stock_
     else:
         for i in range(num_portfolios):
             stock_weights = np.random.random(num_assets - num_bond)
-            #print(stock_weights)
+            
             stock_weights = stock_weight * (stock_weights/np.sum(stock_weights))
             bond_weights = np.random.random(num_bond)
             bond_weights = bond_weight * (bond_weights/np.sum(bond_weights))
@@ -114,18 +115,27 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         security_type.sort()
         num_bond = security_type.count("Bond")
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
+        cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
+        r = stockreturns
+        V = cov_matrix
+        e = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
+        e = np.array(e)
+        A = np.dot(e.T, np.dot(np.linalg.inv(V), e))
+        B = np.dot(r.T, np.dot(np.linalg.inv(V), e))
+        C = np.dot(r.T, np.dot(np.linalg.inv(V), r))
     else:
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
-    cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
+        cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
+        r = stockreturns
+        V = cov_matrix
+        e = np.ones(r.shape)
+        A = np.dot(e.T, np.dot(np.linalg.inv(V), e))
+        B = np.dot(r.T, np.dot(np.linalg.inv(V), e))
+        C = np.dot(r.T, np.dot(np.linalg.inv(V), r))
     efficient_portfolio_returns = []
     efficient_portfolio_volatilities = []
     efficient_portfolio_weights = []
-    r = stockreturns
-    V = cov_matrix
-    e = np.ones(r.shape)
-    A = np.dot(e.T, np.dot(np.linalg.inv(V), e))
-    B = np.dot(r.T, np.dot(np.linalg.inv(V), e))
-    C = np.dot(r.T, np.dot(np.linalg.inv(V), r))
+    
     coeff = [A,B,C]
     if stock_weight is not None:
         cons = ({'type': 'eq', 'fun': lambda x: portfolio_return(x, stockreturns) - target},   
@@ -150,11 +160,11 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         efficient_portfolio_returns.append(target)
         efficient_portfolio_volatilities.append(np.sqrt(result['fun'] * 252))
         efficient_portfolio_weights.append(result['x'])
-
+    
     if stock_weight is None:
-        return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights
+        return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights, coeff
     else:
-        return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights
+        return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights, coeff
 
 
 """
@@ -164,16 +174,25 @@ This function uses the efficient_frontier() function to construct efficient fron
 
 def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False, start = None, end = None, rolling = False, port_bond=None, port_stock=None):
     start1 = time.perf_counter()
+    coeff_list = []
+    returns_coeff = []
     if rolling == True:
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
-        x1, y1, w1 = efficient_frontier(stocks, portfolios, time_frame, security_type,port_stock,port_bond,start,end)
+        if noconstraints is False:
+            x1, y1, w1, coeff = efficient_frontier(stocks, portfolios, time_frame, security_type,port_stock,port_bond,start,end)
+        else:
+            x1, y1, w1, coeff = efficient_frontier(stocks, portfolios, time_frame, security_type,None,port_bond,start,end)
         plt.plot(x1,y1,label = start)
-        title = str(port_stock)+"-"+str(port_bond)+" over " +str(time_frame)
+        if noconstraints is False:
+            title = str(port_stock)+"-"+str(port_bond)+" over " +str(time_frame)
+        else:
+            title = "Unconstrained over " +str(time_frame)
         plt.title(title)
-
+        returns = y1
         plt.legend()
     else:
+        figure1 = plt.figure()
         writer = pd.ExcelWriter('portfolio_weights.xlsx', engine='openpyxl')
         weights = np.random.random(len(stocks))
         weights = [1/len(stocks)] * len(stocks)
@@ -192,13 +211,17 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
             {"alpha": None, "beta": None, "sheet_name": 'No Constraints', "label": "No Constraints", "plot": False, "portfolios_multiplier": 10},
             #{"alpha": 1, "beta": 0, "sheet_name": '100-0', "label": "100-0", "plot": True},
         ]
-
+        coeff_list = []
+        returns_coeff = []
+        labels = []
         for config in configs:
+            labels.append(config["label"])
             alpha, beta, sheet_name, label, plot = config["alpha"], config["beta"], config["sheet_name"], config["label"], config["plot"]
             portfolios_multiplier = config.get("portfolios_multiplier", 1)
 
-            x, y, w = efficient_frontier(stocks, portfolios * portfolios_multiplier, time_frame, security_type, alpha, beta, start, end)
-
+            x, y, w, coeff = efficient_frontier(stocks, portfolios * portfolios_multiplier, time_frame, security_type, alpha, beta, start, end)
+            returns_coeff.append(y)
+            coeff_list.append(coeff)
             df = pd.DataFrame(w, columns=stocks)
             df['Returns'] = y
             df['Risk'] = x
@@ -249,20 +272,29 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         plt.xlabel("Risk")
         plt.ylabel("Return")
         plt.legend()
-        plt.savefig(title,format="pdf")
-        plt.show()
-        
+        #plt.savefig(title,format="pdf")
+        #plt.show()
+    if rolling is True:
+        return coeff, returns, title
+    else:
+        return coeff_list, returns_coeff, labels
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-graphit(100,assets,assettype,"10y",True,"2015-01-01","2020-12-31")
+#x, y, z = graphit(100,assets,assettype,"10y",True,"2010-01-01","2020-12-31")
 
-def rolling(start, end, windowsize, bond,stock):
+def rolling(start, end, windowsize, bond,stock,unconstrained = False):
     start_date = pd.to_datetime(start)
     end_date = pd.to_datetime(end)
+    assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
+    assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
     window_size = windowsize  # years
     dates_range = pd.date_range(start_date, end_date, freq='YS') 
     print(dates_range)
+    coeff_list = []
+    returns_list = []
+    label_list = []
+    fig1 = plt.figure()
     for current_year in dates_range:
         start = current_year - pd.DateOffset(years=window_size)
         end = current_year
@@ -272,15 +304,66 @@ def rolling(start, end, windowsize, bond,stock):
         end = end.strftime('%Y-%m-%d')
         #print(assettype)
         time_frame = str(window_size) + "y"
-        graphit(100, assets, assettype, time_frame, True, start, end,True,bond,stock)
+        if unconstrained is False:
+            #x, y, z= graphit(100, assets, assettype, time_frame, True, start, end,True,bond,stock)
+            x, y, z= graphit(100, assets, assettype, time_frame,False,start,end,True,bond,stock)
+        else:
+            x, y, z= graphit(100, assets, assettype, time_frame, True, start, end,True,bond,stock)
+        label_list.append(start)
+        coeff_list.append(x)
+        returns_list.append(y)
     plt.xlabel("Risk(STD)")
     plt.ylabel("Return(Annualized log returns)")
-    title = time_frame
+    if unconstrained is True:
+        title = "unconstrained"
+    else:
+        title = time_frame
     t = datetime.datetime.now()
     title+= str(t) + ".pdf"
     title = title.replace(" ","_")
     title = title.replace("-","_")
     title = title.replace(":","_")
-    plt.savefig(title,format="pdf")
-    plt.show()
-#rolling("2015-01-01","2023-01-01",5,0.4,0.6)
+    #plt.savefig(title,format="pdf")
+    #plt.show()
+    return coeff_list, returns_list, label_list
+x, y, z= rolling("2017-01-01","2023-01-01",5,0.4,0.6,True)
+
+def polynomial(coefficients, returns, label_list = None):
+    print(label_list)
+    fig2 = plt.figure()
+    for i in range(len(coefficients)):
+        r = np.linspace(min(returns[i]), max(returns[i]), 100)
+        A = coefficients[i][0]
+        B = coefficients[i][1]
+        C = coefficients[i][2]
+        y = ((A * r**2 - 2 * B * r + C) / (A * C - B**2)) ** (1/2)
+        if label_list is not None:
+            plt.plot(y, r,label =label_list[i])
+        else:
+            plt.plot(y, r)
+    plt.xlabel('Risk')
+    plt.ylabel('Returns')
+    plt.title('Polynomial Equation')
+    plt.legend()
+    plt.grid(True)
+    #plt.show()
+
+polynomial(x,y,z)
+
+def save_image(filename):
+    p = PdfPages(filename)
+    fig_nums = plt.get_fignums()  
+    figs = [plt.figure(n) for n in fig_nums]
+    for fig in figs: 
+        fig.savefig(p, format='pdf') 
+    p.close()  
+
+
+filename = "multi_plot_image"  
+t = datetime.datetime.now()
+filename+= str(t) + ".pdf"
+filename = filename.replace(" ","_")
+filename = filename.replace("-","_")
+filename = filename.replace(":","_")
+# call the function
+save_image(filename)
