@@ -116,27 +116,39 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         num_bond = security_type.count("Bond")
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
         cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
-        r = stockreturns
+        r = np.array(stockreturns)
         V = cov_matrix
-        e = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
-        e = np.array(e)
-        A = np.dot(e.T, np.dot(np.linalg.inv(V), e))
-        B = np.dot(r.T, np.dot(np.linalg.inv(V), e))
-        C = np.dot(r.T, np.dot(np.linalg.inv(V), r))
+        temp = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
+        temp = np.array(temp)
+        #HERE
+        r_p = temp * r   
+        var_p = temp @ V @ temp.T
+        e = np.ones(r.shape)
+        V_inv = np.linalg.inv(V)  
+        A = e.T @ V_inv @ e
+        B = r_p.T @ V_inv @ e
+        C = r_p.T @ V_inv @ e   # Use r_p in place of e
     else:
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
         cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
-        r = stockreturns
+        r = np.array(stockreturns)
+        temp = [1/len(stocks)] * len(stocks)
+        temp = np.array(temp)
+        #HERE
         V = cov_matrix
+        r_p =  r   
+        var_p = temp @ V @ temp.T
         e = np.ones(r.shape)
-        A = np.dot(e.T, np.dot(np.linalg.inv(V), e))
-        B = np.dot(r.T, np.dot(np.linalg.inv(V), e))
-        C = np.dot(r.T, np.dot(np.linalg.inv(V), r))
+        V_inv = np.linalg.inv(V)  
+        A = e.T @ V_inv @ e
+        B = r_p.T @ V_inv @ e
+        C = r_p.T @ V_inv @ e
     efficient_portfolio_returns = []
     efficient_portfolio_volatilities = []
     efficient_portfolio_weights = []
     
     coeff = [A,B,C]
+    print(coeff)
     if stock_weight is not None:
         cons = ({'type': 'eq', 'fun': lambda x: portfolio_return(x, stockreturns) - target},   
                 {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
@@ -279,9 +291,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
     else:
         return coeff_list, returns_coeff, labels
 
-assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
-assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-#x, y, z = graphit(100,assets,assettype,"10y",True,"2010-01-01","2020-12-31")
+
 
 def rolling(start, end, windowsize, bond,stock,unconstrained = False):
     start_date = pd.to_datetime(start)
@@ -326,19 +336,25 @@ def rolling(start, end, windowsize, bond,stock,unconstrained = False):
     #plt.savefig(title,format="pdf")
     #plt.show()
     return coeff_list, returns_list, label_list
-x, y, z= rolling("2017-01-01","2023-01-01",5,0.4,0.6,True)
+
 
 def polynomial(coefficients, returns, label_list = None):
     print(label_list)
     fig2 = plt.figure()
     for i in range(len(coefficients)):
-        r = np.linspace(min(returns[i]), max(returns[i]), 100)
+        #print(coefficients[i])
+        r = np.linspace(0, max(returns[i]), 100)
         A = coefficients[i][0]
         B = coefficients[i][1]
         C = coefficients[i][2]
-        y = ((A * r**2 - 2 * B * r + C) / (A * C - B**2)) ** (1/2)
+        if C < 0:
+            print("hit")
+            C = 1
+        y = (((A * r**2) - (2 * B * r) + C) / ((A * C) - B**2))
+        print(y[0])
+        #y = A * r ** 2 + B * r + C
         if label_list is not None:
-            plt.plot(y, r,label =label_list[i])
+            plt.plot(y , r,label =label_list[i])
         else:
             plt.plot(y, r)
     plt.xlabel('Risk')
@@ -348,7 +364,7 @@ def polynomial(coefficients, returns, label_list = None):
     plt.grid(True)
     #plt.show()
 
-polynomial(x,y,z)
+
 
 def save_image(filename):
     p = PdfPages(filename)
@@ -358,6 +374,13 @@ def save_image(filename):
         fig.savefig(p, format='pdf') 
     p.close()  
 
+
+assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
+assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
+x, y, z = graphit(100,assets,assettype,"10y",True,"2010-01-01","2020-12-31")
+
+#x, y, z= rolling("2010-01-01","2023-01-01",10,0.4,0.6,False)
+polynomial(x,y,z)
 
 filename = "multi_plot_image"  
 t = datetime.datetime.now()
