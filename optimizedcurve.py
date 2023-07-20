@@ -127,7 +127,7 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         V_inv = np.linalg.inv(V)  
         A = e.T @ V_inv @ e
         B = r_p.T @ V_inv @ e
-        C = r_p.T @ V_inv @ e   # Use r_p in place of e
+        C = r_p.T @ V_inv @ r_p   # Use r_p in place of e
     else:
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
         cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
@@ -142,7 +142,7 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         V_inv = np.linalg.inv(V)  
         A = e.T @ V_inv @ e
         B = r_p.T @ V_inv @ e
-        C = r_p.T @ V_inv @ e
+        C = r_p.T @ V_inv @ r_p
     efficient_portfolio_returns = []
     efficient_portfolio_volatilities = []
     efficient_portfolio_weights = []
@@ -167,7 +167,7 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     for target in target_returns:
 
         bounds = tuple((0, 1) for asset in range(len(stocks)))
-        result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=bounds, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
+        result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=None, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
         
         efficient_portfolio_returns.append(target)
         efficient_portfolio_volatilities.append(np.sqrt(result['fun'] * 252))
@@ -251,6 +251,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         writer._save()
         end1 = time.perf_counter()
         print(end1-start1)
+        """
         sp500 = yf.download("^GSPC", start=start, end=end)
         sp500_price_relative = sp500['Close'] / sp500['Close'].shift(1)
         sp500_log_returns = np.log(sp500_price_relative).dropna() * 100
@@ -269,7 +270,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         agg_annual_returns = ((1 + agg_log_returns.mean()/100)**252 - 1) * 100
         agg_annual_volatility = agg_log_returns.std() * np.sqrt(252)
         plt.scatter(agg_annual_volatility, agg_annual_returns, color='green', label='AGG')
-
+        """
         if start is None:
             plt.title(time_frame)
         else:

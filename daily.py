@@ -112,17 +112,20 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
         cov_matrix, stockreturns, num_years, regreturns = allto(stocks, timeframe,start,end)
         r = np.array(regreturns)
-        print(r)
+        #print(r)
         V = cov_matrix
-        temp = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
+        temp = [bond_weight/num_bond] * num_bond + [stock_weight/(len(stocks) - num_bond)] * (len(stocks) - num_bond)
+        temp = temp/np.sum(temp)
         temp = np.array(temp)
         #HERE
-        r_p = temp * r   
+        r_p = r
+        
         var_p = temp @ V @ temp.T
         e = np.ones(r.shape)
-        V_inv = np.linalg.inv(V)  
-        A = e.T @ V_inv @ e
-        B = r_p.T @ V_inv @ e
+        V_inv = np.linalg.inv(V)
+        #print(r_p)  
+        A = temp.T @ V_inv @ temp
+        B = r_p.T @ V_inv @ temp
         C = r_p.T @ V_inv @ r_p  # Use r_p in place of e
     else:
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
@@ -130,8 +133,12 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         r = np.array(regreturns)
         r_p =  r   
         #var_p = temp @ V @ temp.T
+        #print(r)
+        
         e = np.ones(r.shape)
         V_inv = np.linalg.inv(cov_matrix)  
+        #print(V_inv)
+        
         A = e.T @ V_inv @ e
         B = r_p.T @ V_inv @ e
         C = r_p.T @ V_inv @ r_p
@@ -376,7 +383,7 @@ def save_image(filename):
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-x, y, z = graphit(100,assets,assettype,"1y",True,"2015-01-01","2020-12-31")
+x, y, z = graphit(100,assets,assettype,"1y",True,"2019-01-01","2020-12-31")
 
 #x, y, z= rolling("2015-01-01","2019-01-01",1,0.4,0.6,True)
 polynomial(x,y,z)
