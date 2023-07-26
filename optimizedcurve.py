@@ -114,20 +114,34 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     if stock_weight is not None: 
         security_type.sort()
         num_bond = security_type.count("Bond")
-        weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
+        #weights_matrix = generate_portfolio_weights(num_bond, len(stocks)-num_bond, bond_weight, stock_weight)
         cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
         r = np.array(stockreturns)
+        #print(r)
+        #weights = weights_matrix[0]
         V = cov_matrix
         temp = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
+        temp = temp
         temp = np.array(temp)
         #HERE
-        r_p = temp * r   
+        #r_p = r * weights
+        
         var_p = temp @ V @ temp.T
         e = np.ones(r.shape)
-        V_inv = np.linalg.inv(V)  
-        A = e.T @ V_inv @ e
-        B = r_p.T @ V_inv @ e
-        C = r_p.T @ V_inv @ r_p   # Use r_p in place of e
+        V_inv = np.linalg.inv(V)
+        #print(r_p)  
+         # Use r_p in place of e
+        num_stocks = len(stocks) - num_bond
+        weights = [bond_weight/num_bond] * num_bond + [stock_weight/num_stocks] * num_stocks
+        weights = np.array(weights)
+
+        # Apply weights to the returns and to the inverse covariance matrix
+        r_p = r
+        V_inv = V_inv * weights[:, None]
+
+        A = weights.T @ V_inv @ weights
+        B = r_p.T @ V_inv @ weights
+        C = r_p.T @ V_inv @ r_p
     else:
         weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
         cov_matrix, stockreturns, num_years = allto(stocks, timeframe,start,end)
@@ -167,7 +181,8 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     for target in target_returns:
 
         bounds = tuple((0, 1) for asset in range(len(stocks)))
-        result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=None, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
+        weights = [1/(len(stocks))] * len(stocks)
+        result = minimize(portfolio_variance, weights, args=(cov_matrix,), method='SLSQP', bounds=bounds, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
         
         efficient_portfolio_returns.append(target)
         efficient_portfolio_volatilities.append(np.sqrt(result['fun'] * 252))

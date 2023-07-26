@@ -73,22 +73,25 @@ This function generates a set of weights for the assets in the portfolio. If spe
  portfolio composed of stocks and bonds, with the portfolio weights for each group summing to certain specified amounts.
 """
 
-def generate_portfolio_weights(num_assets, num_portfolios, num_bond=None, stock_weight=None, bond_weight=None):
-    weights_matrix = []
-    if num_bond is None:
-        for i in range(num_portfolios):
-            weights = np.random.random(num_assets)
-            weights /= np.sum(weights)
-            weights_matrix.append(weights)
+def generate_portfolio_weights(num_bond, num_stock, bond_weight, stock_weight, unconstrained = False):
+    if unconstrained is False:
+        weights_matrix = []
+
+        # Generate individual weights for bonds and stocks
+        bond_weights = [bond_weight / num_bond] * num_bond
+        stock_weights = [stock_weight / num_stock] * num_stock
+
+        # Concatenate bond and stock weights
+        weights = np.concatenate([bond_weights, stock_weights])
+        weights_matrix.append(weights)
     else:
-        for i in range(num_portfolios):
-            stock_weights = np.random.random(num_assets - num_bond)
-            
-            stock_weights = stock_weight * (stock_weights/np.sum(stock_weights))
-            bond_weights = np.random.random(num_bond)
-            bond_weights = bond_weight * (bond_weights/np.sum(bond_weights))
-            weights_matrix.append(np.concatenate((bond_weights,stock_weights)))
+        weights_matrix = []
+        weights = np.random.random(num_bond)
+        weights /= np.sum(weights)
+        weights_matrix.append(weights)
+
     return weights_matrix
+
 
 
 """
@@ -109,35 +112,41 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     if stock_weight is not None: 
         security_type.sort()
         num_bond = security_type.count("Bond")
-        weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
+        weights_matrix = generate_portfolio_weights(num_bond, len(stocks)-num_bond, bond_weight, stock_weight)
         cov_matrix, stockreturns, num_years, regreturns = allto(stocks, timeframe,start,end)
         r = np.array(regreturns)
         #print(r)
+        weights = weights_matrix[0]
         V = cov_matrix
-        temp = [bond_weight/num_bond] * num_bond + [stock_weight/(len(stocks) - num_bond)] * (len(stocks) - num_bond)
-        temp = temp/np.sum(temp)
+        temp = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
+        temp = temp
         temp = np.array(temp)
         #HERE
-        r_p = r
-        
+        r_p = r * weights
         var_p = temp @ V @ temp.T
         e = np.ones(r.shape)
         V_inv = np.linalg.inv(V)
         #print(r_p)  
-        A = temp.T @ V_inv @ temp
-        B = r_p.T @ V_inv @ temp
-        C = r_p.T @ V_inv @ r_p  # Use r_p in place of e
+         # Use r_p in place of e
+        num_stocks = len(stocks) - num_bond
+        weights = [bond_weight/num_bond] * num_bond + [stock_weight/num_stocks] * num_stocks
+        weights = np.array(weights)
+
+        # Apply weights to the returns and to the inverse covariance matrix
+        r_p = r
+        V_inv = V_inv * weights[:, None]
+
+        A = weights.T @ V_inv @ weights
+        B = r_p.T @ V_inv @ weights
+        C = r_p.T @ V_inv @ r_p
+
     else:
-        weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
+        weights_matrix = generate_portfolio_weights(len(stocks), None,None,None,True)
         cov_matrix, stockreturns, num_years, regreturns = allto(stocks, timeframe,start,end)
         r = np.array(regreturns)
         r_p =  r   
-        #var_p = temp @ V @ temp.T
-        #print(r)
-        
         e = np.ones(r.shape)
         V_inv = np.linalg.inv(cov_matrix)  
-        #print(V_inv)
         
         A = e.T @ V_inv @ e
         B = r_p.T @ V_inv @ e
@@ -156,18 +165,19 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
                 )
         min_return = min(stockreturns[:num_bond]) * bond_weight + min(stockreturns[num_bond:]) * stock_weight
         max_return = max(stockreturns[:num_bond]) * bond_weight + max(stockreturns[num_bond:]) * stock_weight
-        target_returns = np.linspace(min_return,max_return,num_portfolios)
-        target_returns = np.linspace(min(stockreturns), max(stockreturns), num_portfolios)
+        target_returns = np.linspace(min_return,0.06,num_portfolios)
+        #target_returns = np.linspace(min(stockreturns),  max(stockreturns), num_portfolios)
     else:
         cons = ({'type': 'eq', 'fun': lambda x: portfolio_return(x, stockreturns) - target},   
                 {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
                 #{'type': 'ineq', 'fun': lambda x: portfolio_return(x, returns)}
                 )
-        target_returns = np.linspace(min(stockreturns), max(stockreturns), num_portfolios)
+        
+        target_returns = np.linspace(min(stockreturns), 2 * max(stockreturns), num_portfolios)
     for target in target_returns:
 
         bounds = tuple((0, 1) for asset in range(len(stocks)))
-        result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=None, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
+        result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=bounds, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
         if target > 0:
             efficient_portfolio_returns.append(target)
             efficient_portfolio_volatilities.append(np.sqrt(result['fun']))
@@ -215,7 +225,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
         # Define the configurations for the efficient frontier
         configs = [
-            {"alpha": 0, "beta": 1, "sheet_name": '0-100', "label": "0-100", "plot": True},
+            #{"alpha": 0, "beta": 1, "sheet_name": '0-100', "label": "0-100", "plot": True},
             {"alpha": 0.55, "beta": 0.45, "sheet_name": '55-45', "label": "55-45", "plot": True},
             {"alpha": 0.60, "beta": 0.40, "sheet_name": '60-40', "label": "60-40", "plot": True},
             {"alpha": 0.4, "beta": 0.6, "sheet_name": '40-60', "label": "40-60", "plot": True},
@@ -383,7 +393,7 @@ def save_image(filename):
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-x, y, z = graphit(100,assets,assettype,"1y",True,"2019-01-01","2020-12-31")
+x, y, z = graphit(100,assets,assettype,"1y",True,"2015-01-01","2020-12-31")
 
 #x, y, z= rolling("2015-01-01","2019-01-01",1,0.4,0.6,True)
 polynomial(x,y,z)
