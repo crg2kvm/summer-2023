@@ -7,12 +7,28 @@ import time
 from openpyxl import load_workbook
 import datetime
 from matplotlib.backends.backend_pdf import PdfPages
+
+#line 261 is where you can change the bounds to include shorting
+
 """
 This function calculates the expected returns
  and log returns for a given stock ticker over a specified time frame. 
  The time frame can be optionally bounded using start and end dates.
 """
 def calcreturns(ticker,time_frame,start = None, end = None):
+    """
+    This function calculates the expected return and log returns for a given stock.
+    
+    Parameters:
+    ticker (str): The ticker symbol of the stock.
+    time_frame (str): The period of time to consider for the return calculation.
+    start (datetime, optional): The start date of the time frame.
+    end (datetime, optional): The end date of the time frame.
+
+    Returns:
+    float: The expected return of the stock.
+    np.array: The log returns of the stock.
+    """
     tick = yf.Ticker(ticker)
 
     if start is None and end is None:
@@ -44,6 +60,20 @@ can be optionally bounded using start and end dates.
 
 
 def allto(stocks, timeframe, start=None, end=None):
+    """
+    This function retrieves stock data, calculates log returns, and generates a covariance matrix for a list of stocks.
+
+    Parameters:
+    stocks (list): A list of ticker symbols of the stocks.
+    timeframe (str): The period of time to consider for the return calculation.
+    start (datetime, optional): The start date of the time frame.
+    end (datetime, optional): The end date of the time frame.
+
+    Returns:
+    DataFrame: The covariance matrix of the stocks' returns.
+    np.array: The mean log returns of the stocks.
+    float: The number of years of the time frame, calculated as the total number of trading days divided by 252.
+    """
     for stock in stocks:
         if start is None:
             data = yf.download(stocks,period=timeframe)
@@ -65,30 +95,55 @@ This function computes the variance (risk) of a portfolio given a set of portfol
 """
 
 def portfolio_variance(weights, cov_matrix):
-    return np.dot(weights.T, np.dot(cov_matrix, weights))
+    """
+    This function calculates the variance of a portfolio given a covariance matrix and a vector of asset weights.
 
+    Parameters:
+    weights (np.array): The weights of the assets in the portfolio.
+    cov_matrix (DataFrame): The covariance matrix of the assets' returns.
+
+    Returns:
+    float: The variance of the portfolio.
+    """
+    return np.dot(weights.T, np.dot(cov_matrix, weights))
 
 """
 This function generates a set of weights for the assets in the portfolio. If specified, it can generate weights for a
  portfolio composed of stocks and bonds, with the portfolio weights for each group summing to certain specified amounts.
 """
 
-def generate_portfolio_weights(num_assets, num_portfolios, num_bond=None, stock_weight=None, bond_weight=None):
-    weights_matrix = []
-    if num_bond is None:
-        for i in range(num_portfolios):
-            weights = np.random.random(num_assets)
-            weights /= np.sum(weights)
-            weights_matrix.append(weights)
+def generate_portfolio_weights(num_bond, num_stock, bond_weight, stock_weight, unconstrained = False):
+    """
+    This function generates a set of portfolio weights for a specified number of portfolios and assets.
+
+    Parameters:
+    num_assets (int): The total number of assets.
+    num_portfolios (int): The number of portfolios to generate.
+    num_bond (int, optional): The number of bond assets in the portfolio.
+    stock_weight (float, optional): The total weight of the stock assets in the portfolio.
+    bond_weight (float, optional): The total weight of the bond assets in the portfolio.
+
+    Returns:
+    list: A list of portfolio weights.
+    """
+    if unconstrained is False:
+        weights_matrix = []
+
+        # Generate individual weights for bonds and stocks
+        bond_weights = [bond_weight / num_bond] * num_bond
+        stock_weights = [stock_weight / num_stock] * num_stock
+
+        # Concatenate bond and stock weights
+        weights = np.concatenate([bond_weights, stock_weights])
+        weights_matrix.append(weights)
     else:
-        for i in range(num_portfolios):
-            stock_weights = np.random.random(num_assets - num_bond)
-            
-            stock_weights = stock_weight * (stock_weights/np.sum(stock_weights))
-            bond_weights = np.random.random(num_bond)
-            bond_weights = bond_weight * (bond_weights/np.sum(bond_weights))
-            weights_matrix.append(np.concatenate((bond_weights,stock_weights)))
+        weights_matrix = []
+        weights = np.random.random(num_bond)
+        weights /= np.sum(weights)
+        weights_matrix.append(weights)
+
     return weights_matrix
+
 
 
 """
@@ -96,6 +151,16 @@ This function calculates the total return of a portfolio given a set of portfoli
 """
 
 def portfolio_return(weights, returns):
+    """
+    This function calculates the total return of a portfolio given a vector of asset weights and the individual asset returns.
+
+    Parameters:
+    weights (np.array): The weights of the assets in the portfolio.
+    returns (np.array): The returns of the individual assets.
+
+    Returns:
+    float: The total return of the portfolio.
+    """
     return np.dot(weights, returns)
 
 
@@ -106,32 +171,65 @@ The function can also include constraints on the portfolio, such as a maximum we
 """
 
 def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None, stock_weight = None, bond_weight = None, start = None, end = None):
+    """
+    This function calculates the efficient frontier for a set of stocks. It generates a number of portfolios with 
+    different weights, calculates the return and volatility of each portfolio, and returns these values.
+
+    Parameters:
+    stocks (list): A list of ticker symbols of the stocks.
+    num_portfolios (int): The number of portfolios to generate.
+    timeframe (str): The period of time to consider for the return calculation.
+    security_type (list, optional): A list of the types of the assets in the portfolio (e.g., "Bond", "Stock").
+    stock_weight (float, optional): The total weight of the stock assets in the portfolio.
+    bond_weight (float, optional): The total weight of the bond assets in the portfolio.
+    start (datetime, optional): The start date of the time frame.
+    end (datetime, optional): The end date of the time frame.
+
+    Returns:
+    list: The volatilities of the portfolios.
+    list: The returns of the portfolios.
+    list: The weights of the portfolios.
+    list: The coefficients used in the calculation of the efficient frontier.
+    """
     if stock_weight is not None: 
         security_type.sort()
         num_bond = security_type.count("Bond")
-        weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios, num_bond, stock_weight, bond_weight)
+        weights_matrix = generate_portfolio_weights(num_bond, len(stocks)-num_bond, bond_weight, stock_weight)
         cov_matrix, stockreturns, num_years, regreturns = allto(stocks, timeframe,start,end)
         r = np.array(regreturns)
-        print(r)
+        #print(r)
+        weights = weights_matrix[0]
         V = cov_matrix
         temp = [bond_weight] * num_bond + [stock_weight] * (len(stocks) - num_bond)
+        temp = temp
         temp = np.array(temp)
         #HERE
-        r_p = temp * r   
+        r_p = r * weights
         var_p = temp @ V @ temp.T
         e = np.ones(r.shape)
-        V_inv = np.linalg.inv(V)  
-        A = e.T @ V_inv @ e
-        B = r_p.T @ V_inv @ e
-        C = r_p.T @ V_inv @ r_p  # Use r_p in place of e
+        V_inv = np.linalg.inv(V)
+        #print(r_p)  
+         # Use r_p in place of e
+        num_stocks = len(stocks) - num_bond
+        weights = [bond_weight/num_bond] * num_bond + [stock_weight/num_stocks] * num_stocks
+        weights = np.array(weights)
+
+        # Apply weights to the returns and to the inverse covariance matrix
+        r_p = r
+        V_inv = V_inv * weights[:, None]
+
+        A = weights.T @ V_inv @ weights
+        B = r_p.T @ V_inv @ weights
+        C = r_p.T @ V_inv @ r_p
+
     else:
-        weights_matrix = generate_portfolio_weights(len(stocks), num_portfolios)
+        weights_matrix = generate_portfolio_weights(len(stocks), None,None,None,True)
         cov_matrix, stockreturns, num_years, regreturns = allto(stocks, timeframe,start,end)
         r = np.array(regreturns)
         r_p =  r   
-        #var_p = temp @ V @ temp.T
         e = np.ones(r.shape)
         V_inv = np.linalg.inv(cov_matrix)  
+        
         A = e.T @ V_inv @ e
         B = r_p.T @ V_inv @ e
         C = r_p.T @ V_inv @ r_p
@@ -140,7 +238,7 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
     efficient_portfolio_weights = []
     reg_volatilities = []
     coeff = [A,B,C]
-    print(coeff)
+    #Weighted constraints
     if stock_weight is not None:
         cons = ({'type': 'eq', 'fun': lambda x: portfolio_return(x, stockreturns) - target},   
                 {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
@@ -150,15 +248,17 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
         min_return = min(stockreturns[:num_bond]) * bond_weight + min(stockreturns[num_bond:]) * stock_weight
         max_return = max(stockreturns[:num_bond]) * bond_weight + max(stockreturns[num_bond:]) * stock_weight
         target_returns = np.linspace(min_return,max_return,num_portfolios)
-        target_returns = np.linspace(min(stockreturns), max(stockreturns), num_portfolios)
+        #target_returns = np.linspace(min(stockreturns),  max(stockreturns), num_portfolios)
+    #Uncpnstrained constraints
     else:
         cons = ({'type': 'eq', 'fun': lambda x: portfolio_return(x, stockreturns) - target},   
                 {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
                 #{'type': 'ineq', 'fun': lambda x: portfolio_return(x, returns)}
                 )
+        
         target_returns = np.linspace(min(stockreturns), max(stockreturns), num_portfolios)
     for target in target_returns:
-
+        #HERE when bounds is None model includes shorting
         bounds = tuple((0, 1) for asset in range(len(stocks)))
         result = minimize(portfolio_variance, weights_matrix[0], args=(cov_matrix,), method='SLSQP', bounds=None, constraints=cons, options={'maxiter': 100000, 'ftol': 1e-9})
         if target > 0:
@@ -166,7 +266,8 @@ def efficient_frontier(stocks, num_portfolios, timeframe,  security_type = None,
             efficient_portfolio_volatilities.append(np.sqrt(result['fun']))
             efficient_portfolio_weights.append(result['x'])
             reg_volatilities.append(result['fun'])
-    
+    print("Optimization Result:",result.success)
+    print("Optimization Message:",result.message)
     if stock_weight is None:
         return efficient_portfolio_volatilities, efficient_portfolio_returns, efficient_portfolio_weights, coeff, regreturns, reg_volatilities
     else:
@@ -179,6 +280,24 @@ This function uses the efficient_frontier() function to construct efficient fron
 """
 
 def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False, start = None, end = None, rolling = False, port_bond=None, port_stock=None):
+    """
+    This function generates efficient frontiers for a portfolio under different constraints and plots these frontiers.
+
+    Args:
+    portfolios (int): The number of portfolios to be generated.
+    stocks (list): A list of ticker symbols representing the assets within the portfolio.
+    security_type (list): A list defining the type of each security within `stocks`.
+    time_frame (str): The time period for which the data will be considered.
+    noconstraints (bool, optional): If True, the portfolio is constructed without constraints. Defaults to False.
+    start (str, optional): The start date for calculating the efficient frontier. Defaults to None.
+    end (str, optional): The end date for calculating the efficient frontier. Defaults to None.
+    rolling (bool, optional): If True, a rolling efficient frontier is calculated. Defaults to False.
+    port_bond (float, optional): The weight of bonds in the portfolio. Defaults to None.
+    port_stock (float, optional): The weight of stocks in the portfolio. Defaults to None.
+    
+    Returns:
+    list: List of coefficients, returns, and title.
+    """
     start1 = time.perf_counter()
     coeff_list = []
     returns_coeff = []
@@ -208,7 +327,7 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
         # Define the configurations for the efficient frontier
         configs = [
-            {"alpha": 0, "beta": 1, "sheet_name": '0-100', "label": "0-100", "plot": True},
+            #{"alpha": 0, "beta": 1, "sheet_name": '0-100', "label": "0-100", "plot": True},
             {"alpha": 0.55, "beta": 0.45, "sheet_name": '55-45', "label": "55-45", "plot": True},
             {"alpha": 0.60, "beta": 0.40, "sheet_name": '60-40', "label": "60-40", "plot": True},
             {"alpha": 0.4, "beta": 0.6, "sheet_name": '40-60', "label": "40-60", "plot": True},
@@ -242,7 +361,6 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
                 for i in w:
                     colors.append(np.sum(i[:bondcount]))
                 plt.scatter(x, y, label=label, c=colors, marker=".", cmap="RdYlGn", s=5)
-
         # Close the Pandas Excel writer and output the Excel file
         writer._save()
         end1 = time.perf_counter()
@@ -278,8 +396,8 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
         title = title.replace(" ","_")
         title = title.replace("-","_")
         title = title.replace(":","_")
-        plt.xlabel("Risk")
-        plt.ylabel("Return")
+        plt.xlabel("Risk(STD)")
+        plt.ylabel("Daily Returns")
         plt.legend()
         #plt.savefig(title,format="pdf")
         #plt.show()
@@ -291,6 +409,20 @@ def graphit(portfolios,stocks, security_type, time_frame, noconstraints = False,
 
 
 def rolling(start, end, windowsize, bond,stock,unconstrained = False):
+    """
+    This function generates efficient frontiers on a rolling basis over a specified window size using the `graphit` function.
+
+    Args:
+    start (str): The start date for calculating the rolling efficient frontiers.
+    end (str): The end date for calculating the rolling efficient frontiers.
+    windowsize (int): The size of the rolling window in years.
+    bond (float): The weight of bonds in the portfolio.
+    stock (float): The weight of stocks in the portfolio.
+    unconstrained (bool, optional): If True, the portfolio is constructed without constraints. Defaults to False.
+
+    Returns:
+    list: List of coefficients, returns, and labels.
+    """
     start_date = pd.to_datetime(start)
     end_date = pd.to_datetime(end)
     assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
@@ -338,6 +470,14 @@ def rolling(start, end, windowsize, bond,stock,unconstrained = False):
 
 
 def polynomial(coefficients, returns, label_list = None):
+    """
+    This function uses the coefficients of the efficient frontier to create a quadratic equation that represents the efficient frontier and plots this equation.
+
+    Args:
+    coefficients (list): A list of the coefficients of the quadratic equation for each efficient frontier.
+    returns (list): A list of the returns of the portfolios on the efficient frontiers.
+    label_list (list, optional): A list of labels for the efficient frontiers. Defaults to None.
+    """
     print(label_list)
     fig2 = plt.figure()
     for i in range(len(coefficients)):
@@ -366,6 +506,12 @@ def polynomial(coefficients, returns, label_list = None):
 
 
 def save_image(filename):
+    """
+    This function saves a matplotlib figure as a PDF file.
+
+    Args:
+    filename (str): The name of the file in which the figure will be saved. The file will be saved in the current working directory.
+    """
     p = PdfPages(filename)
     fig_nums = plt.get_fignums()  
     figs = [plt.figure(n) for n in fig_nums]
@@ -376,9 +522,9 @@ def save_image(filename):
 
 assets = ["TLT","AGG","SHY","XLP","XLE","XOP","XLY","XLF","XLV","XLI","XLB","XLK","XLU"]
 assettype = ["Bond","Bond","Bond","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock","Stock"]
-x, y, z = graphit(100,assets,assettype,"1y",True,"2015-01-01","2020-12-31")
+x, y, z = graphit(100,assets,assettype,"1y",True,"2019-01-01","2022-12-31")
 
-#x, y, z= rolling("2015-01-01","2019-01-01",1,0.4,0.6,True)
+#x, y, z= rolling("2015-01-01","2023-01-01",1,0.4,0.6,True)
 polynomial(x,y,z)
 
 filename = "multi_plot_image"  
